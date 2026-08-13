@@ -81,6 +81,7 @@ def test_public_route_sends_no_auth_and_joins_base_url() -> None:
 def test_bearer_and_default_headers_plus_limits_are_preserved() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         assert request.headers["authorization"] == "Bearer tonia_test"
+        assert "x-api-key" not in request.headers
         assert request.headers["x-tonia-title"] == "SDK E2E"
         assert request.headers["user-agent"] == SDK_USER_AGENT
         return httpx.Response(

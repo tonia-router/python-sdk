@@ -18,7 +18,7 @@ from tonia.errors import (
 )
 
 
-def test_chat_200_policy_carrier() -> None:
+def test_http_200_policy_carrier() -> None:
     with pytest.raises(PolicyBlockError) as exc:
         raise_from_response_body(
             {"_tonia_policy_block": {"code": "regulated_content_detected"}},
@@ -27,7 +27,7 @@ def test_chat_200_policy_carrier() -> None:
     assert exc.value.policy_block["code"] == "regulated_content_detected"
 
 
-def test_chat_200_entitlement_carrier() -> None:
+def test_http_200_entitlement_carrier() -> None:
     with pytest.raises(EntitlementError) as exc:
         raise_from_response_body(
             {
@@ -169,7 +169,7 @@ def test_quota_429_is_entitlement_not_rate_limit() -> None:
     assert exc.value.retry_after_seconds == 86400
 
 
-def test_chat_200_entitlement_carrier_lifts_retry_after_and_scope() -> None:
+def test_http_200_entitlement_carrier_lifts_retry_after_and_scope() -> None:
     with pytest.raises(EntitlementError) as exc:
         raise_from_response_body(
             {

@@ -1,21 +1,19 @@
-# python-sdk
+# tonia
 
 Official Python client for [tonia Pass](https://pass.tonia.ca).
 
-**Package:** [`tonia`](https://pypi.org/project/tonia/)  
+**PyPI:** [`tonia`](https://pypi.org/project/tonia/)  
 **API contract:** [`tonia-api`](https://github.com/tonia-router/tonia-api)
 
-**Python:** 3.11–3.14 (developed on 3.13). 3.10 reaches end of support in
-October 2026 and is not supported.
+Requires Python 3.11–3.14 (developed on 3.13). Python 3.10 is not supported.
 
-**License:** Copyright (c) 2026 tonia inc.. Apache 2.0 — commercial use allowed.
-Keep the copyright notice and `NOTICE` (attribution to tonia,
-https://tonia.ca) if you copy or redistribute this software.
+**License:** Copyright (c) 2026 tonia inc. Apache 2.0. Keep the copyright
+notice and `NOTICE` (attribution to tonia, https://tonia.ca) if you copy or
+redistribute this software.
 
 ```bash
-# local-staging (packages not on PyPI yet):
-pip install -e ../python-sdk
-# published: pip install tonia
+pip install tonia
+# from a local checkout: pip install -e ../python-sdk
 ```
 
 ```python
@@ -26,7 +24,7 @@ with Tonia(api_key=os.environ["TONIA_API_KEY"]) as client:
     listed = client.models.list()
     ids = [model["id"] for model in listed["data"]]
     if not ids:
-        raise RuntimeError("empty allowlist — do not guess a model id")
+        raise RuntimeError("this key has no models; check the profile allowlist in the portal")
     completion = client.chat.completions.create(
         model=ids[0],
         messages=[{"role": "user", "content": "Bonjour"}],
@@ -67,23 +65,21 @@ async with AsyncTonia(api_key=os.environ["TONIA_API_KEY"]) as client:
 
 `client.models.list()` is what this key may call: the intersection of the
 Workspace roster and the bound profile's `model_allowlist` /
-`provider_allowlist`, resolved live on every request. Empty allowlist →
-empty list. `"*"` → every reachable model for those providers. Editing the
-profile (or Workspace Policies that merge keywords / fill omitted detection)
-changes the next call — no key rotation.
+`provider_allowlist`, resolved live on every request. An empty allowlist
+returns an empty list. `"*"` returns every reachable model for those
+providers. Editing the profile (or Workspace Policies that merge keywords /
+fill omitted detection) changes the next call — no key rotation.
 
-```python
-listed = client.models.list()
-ids = [model["id"] for model in listed["data"]]
-client.chat.completions.create(
-    model=ids[0],
-    messages=[{"role": "user", "content": "Bonjour"}],
-)
-```
+That helper sends `Authorization: Bearer` and returns **OpenAI-shaped** ids
+(`openai/…`, `anthropic/claude-…`, `gemini/…`). The same `GET /v1/models`
+with `x-api-key` only (Anthropic SDKs, Claude Code) returns
+**Anthropic-shaped** ids (`claude-…`, no provider prefix).
+`messages.create` sends `x-api-key` but still takes the OpenAI-shaped id
+from `models.list()`. Do not mix the two id styles.
 
-Chat conversation history (`/v1/conversations*`) stays on the chat app —
-it is not part of this SDK. Store threads in your app and resend `messages[]`
-(see sdk-examples `09_saas_integrator`).
+Chat conversation history (`/v1/conversations*`) stays on the chat app.
+Store threads in your app and resend `messages[]` (see sdk-examples
+`09_saas_integrator`).
 
 For paths without a named helper, use `client.request(method, path, body)`.
 Only supported Pass path prefixes are accepted.
@@ -96,11 +92,11 @@ Only supported Pass path prefixes are accepted.
 | Gemini image SKUs (`gemini-*-image*`) | `client.interactions.create` | `POST /v1/interactions` |
 
 Gemini on `/v1/images/*` returns HTTP 400 `provider_requires_surface`
-(`required_surface: interactions`). Do not retry that call on `/v1/images/*`
-and do not send a Gemini image SKU to `/v1/chat/completions`.
+(`required_surface: interactions`). Retry on `/v1/interactions` instead.
+Do not send a Gemini image SKU to `/v1/chat/completions`.
 
 Generate (string `input`, `stream: false`). Pick a Gemini image id from
-`models.list()` — do not invent one:
+`models.list()`:
 
 ```python
 gemini_image = next(
@@ -133,11 +129,11 @@ The response is native Interactions JSON. Output images live on
 The SDK does not reshape that envelope to OpenAI `{data:[{b64_json}]}`.
 
 Image helpers abort after 300 seconds unless you set `timeout` on `Tonia`.
-Chat helpers keep the 60s default. Chat-vision / `/v1/images` **inputs** still use inline
-`data:image/png;base64,...` URLs; Pass refuses remote `http(s)` image links
-with `remote_image_url_not_supported`.
+Chat helpers keep the 60s default. Chat-vision / `/v1/images` **inputs** still
+use inline `data:image/png;base64,...` URLs; Pass refuses remote `http(s)`
+image links with `remote_image_url_not_supported`.
 
-## Errors & content redaction
+## Errors and content redaction
 
 HTTP 200 responses may still include `_tonia_policy_block` or
 `_tonia_entitlement_block` — the client raises typed errors. Content
@@ -154,7 +150,7 @@ application before encoding it. Gemini Interactions **edit** parts use
 
 ## Rate limits and retries
 
-The SDK does not auto-retry. Honor `error.retryable` and
+The SDK does not auto-retry. Use `error.retryable` and
 `error.retry_after_seconds` (from `Retry-After`).
 
 Admission 429 is `RateLimitError` (`type: rate_limit_error`,
@@ -171,7 +167,7 @@ is not queued. `reason` and `scope` say which limit hit:
 Per-key RPM defaults to 600. In-flight concurrency is a separate limit.
 A streaming call holds a slot until the stream ends.
 
-Do not treat every 429 the same:
+Not every 429 is admission:
 
 | What | Class | `code` | Retry? |
 | --- | --- | --- | --- |
@@ -205,16 +201,13 @@ pip install -e ".[dev]"
 pytest
 ```
 
-## Use with coding agents
+## Examples and coding tools
 
-Install the portable [`tonia-sdk` skill](https://github.com/tonia-router/skills):
+Cookbook recipes: [`sdk-examples`](https://github.com/tonia-router/sdk-examples).
+
+To point Cursor, Claude Code, or Codex at Pass, install the
+[`tonia-sdk` skill](https://github.com/tonia-router/skills):
 
 ```bash
 gh skill install tonia-router/skills tonia-sdk
 ```
-
-Cursor: copy the `tonia-sdk` folder (the directory that contains `SKILL.md`)
-to `.cursor/skills/tonia-sdk/` (project) or `~/.cursor/skills/tonia-sdk/`
-(user). That is an Agent Skill, not a Cursor Rule.
-
-Examples live in [`sdk-examples`](https://github.com/tonia-router/sdk-examples).
