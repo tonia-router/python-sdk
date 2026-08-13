@@ -1,6 +1,3 @@
-# OpenAPI Generator output is CI smoke only. The public `Tonia` client
-# is hand-written under src/ and does not import this tree.
-generated/
 __pycache__/
 *.pyc
 *.egg-info/

@@ -358,7 +358,7 @@ def test_gemini_interactions_image_body_is_passed_through_unchanged() -> None:
         client.interactions.create(**body)
 
 
-def test_gemini_path_a_generate_maps_provider_requires_surface() -> None:
+def test_gemini_images_generate_maps_provider_requires_surface() -> None:
     def handler(_request: httpx.Request) -> httpx.Response:
         return httpx.Response(
             400,

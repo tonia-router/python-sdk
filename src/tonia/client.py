@@ -271,7 +271,7 @@ class _Images:
         self._c = client
 
     def generate(self, **body: Any) -> Any:
-        """Path A generate (openai / xAI / StepFun). Gemini → /v1/interactions."""
+        """OpenAI-shaped generate. Gemini uses /v1/interactions."""
         return self._c._send(
             "POST",
             "/v1/images/generations",
@@ -280,7 +280,7 @@ class _Images:
         )
 
     def edit(self, **body: Any) -> Any:
-        """Path A edit (openai / xAI / StepFun). Gemini → /v1/interactions."""
+        """OpenAI-shaped edit. Gemini uses /v1/interactions."""
         return self._c._send(
             "POST", "/v1/images/edits", body, timeout=self._c._image_timeout()
         )
@@ -312,7 +312,7 @@ class _Interactions:
         self._c = client
 
     def create(self, **body: Any) -> Any:
-        """Gemini text and image SKUs. Native Interactions body, not Path A."""
+        """Gemini text and image SKUs. Native Interactions body."""
         if body.get("stream"):
             return self.stream(**body)
         return self._c._send(
