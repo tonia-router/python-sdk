@@ -4,9 +4,11 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
 
 permissions:
   contents: write
+  id-token: write
 
 jobs:
   release:
@@ -19,6 +21,7 @@ jobs:
       - run: python -m pip install --upgrade pip build
       - run: python -m build
       - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -26,12 +29,14 @@ jobs:
           cat > /tmp/notes.md <<EOF
           Official Python client for tonia Pass (\`tonia\`).
 
-          Install from PyPI after registry publish: \`pip install tonia\`
-
-          From this release:
-
-              pip install https://github.com/tonia-router/python-sdk/releases/download/${TAG}/tonia-0.2.1-py3-none-any.whl
+          Install: \`pip install tonia\`
 
           Requires Python 3.11+. Apache 2.0, copyright 2026 tonia inc.
           EOF
-          gh release create "$TAG" --title "$TAG" --notes-file /tmp/notes.md dist/*
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" dist/* --clobber
+          else
+            gh release create "$TAG" --title "$TAG" --notes-file /tmp/notes.md dist/*
+          fi
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
