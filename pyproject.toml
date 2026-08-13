@@ -1,11 +1,19 @@
 [project]
 name = "tonia"
-version = "0.1.0"
+version = "0.2.1"
 description = "Official Python client for tonia Pass"
 readme = "README.md"
-requires-python = ">=3.10"
-license = { text = "Proprietary" }
+requires-python = ">=3.11"
+license = { text = "Apache-2.0" }
 authors = [{ name = "tonia" }]
+classifiers = [
+  "License :: OSI Approved :: Apache Software License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+]
 dependencies = [
   "httpx>=0.27",
 ]
@@ -20,5 +28,10 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+tonia = ["py.typed"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Prefer this package's src/ over any other installed `tonia` (e.g. Pass API editable).
+pythonpath = ["src"]

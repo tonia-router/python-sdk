@@ -7,7 +7,11 @@ from typing import Any, Literal, Mapping
 from .errors import AuthenticationError
 
 AuthStyle = Literal["bearer", "api_key", "none"]
-DEFAULT_BASE_URL = "https://pass.tonia.ca"
+DEFAULT_BASE_URL = "https://pass.tonia.ca:8443"
+DEFAULT_TIMEOUT_S = 60.0
+IMAGE_TIMEOUT_S = 300.0
+SDK_VERSION = "0.2.1"
+SDK_USER_AGENT = f"tonia-sdk-py/{SDK_VERSION}"
 
 
 def build_headers(
@@ -19,6 +23,8 @@ def build_headers(
     accept: str = "application/json",
 ) -> dict[str, str]:
     hdrs = {"Accept": accept, **dict(default_headers), **dict(headers or {})}
+    if not any(key.lower() == "user-agent" for key in hdrs):
+        hdrs["User-Agent"] = SDK_USER_AGENT
     if auth != "none":
         if not api_key:
             raise AuthenticationError(

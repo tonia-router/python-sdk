@@ -51,6 +51,10 @@ def feed_sse(buffer: str, chunk: str) -> tuple[list[SseEvent], str]:
 
 def raise_if_stream_carrier(payload: Any) -> None:
     raise_from_response_body(payload, status=200)
+    if isinstance(payload, dict):
+        nested = payload.get("message")
+        if isinstance(nested, dict):
+            raise_from_response_body(nested, status=200)
 
 
 def iter_sse_bytes(chunks: Iterator[bytes]) -> Iterator[SseEvent]:

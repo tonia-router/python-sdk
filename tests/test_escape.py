@@ -7,6 +7,7 @@ from tonia.errors import PathNotAllowedError
 def test_normalize_path() -> None:
     assert normalize_path("v1/models?x=1") == "/v1/models"
     assert normalize_path("//v1//chat//completions") == "/v1/chat/completions"
+    assert normalize_path("/v1/models/../chat/completions") == "/v1/chat/completions"
 
 
 @pytest.mark.parametrize(
@@ -16,21 +17,28 @@ def test_normalize_path() -> None:
         "/v1/chat/completions",
         "/v1/public/catalogue",
         "/v1/status",
-        "/v1/conversations/export",
+        "/v1/interactions",
     ],
 )
 def test_supported(path: str) -> None:
     assert assert_path_allowed(path) == path
 
 
+def test_dot_segment_traversal_to_supported_prefix_is_allowed() -> None:
+    assert (
+        assert_path_allowed("/v1/models/../chat/completions")
+        == "/v1/chat/completions"
+    )
+
+
 @pytest.mark.parametrize(
     "path",
     [
-        "/v1" + "/" + "adm" + "in" + "/keys",
-        "/v1/models/../" + "adm" + "in" + "/x",
-        "/V1/" + "ADM" + "IN" + "/foo",
         "/v1/billing/checkout",
+        "/v1/conversations",
+        "/v1/conversations/export",
         "/healthz",
+        "/v1/models/../billing/checkout",
     ],
 )
 def test_unsupported(path: str) -> None:

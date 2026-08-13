@@ -5,6 +5,43 @@ from __future__ import annotations
 from typing import Any, Mapping
 
 
+def _header_get(headers: Mapping[str, str] | None, name: str) -> str | None:
+    if headers is None:
+        return None
+    getter = getattr(headers, "get", None)
+    if callable(getter):
+        value = getter(name)
+        if value:
+            return str(value)
+        lowered = getter(name.lower())
+        if lowered:
+            return str(lowered)
+    lowered = name.lower()
+    for key, value in headers.items():
+        if str(key).lower() == lowered and value:
+            return str(value)
+    return None
+
+
+def parse_retry_after_seconds(headers: Mapping[str, str] | None) -> int | None:
+    """Integer ``Retry-After`` seconds, or ``None`` when missing / HTTP-date."""
+    raw = _header_get(headers, "retry-after")
+    if raw is None:
+        return None
+    text = raw.strip()
+    if not text.isdigit():
+        return None
+    return int(text)
+
+
+def parse_request_id(headers: Mapping[str, str] | None) -> str | None:
+    raw = _header_get(headers, "x-tonia-request-id")
+    if raw is None:
+        return None
+    text = raw.strip()
+    return text or None
+
+
 class ToniaError(Exception):
     def __init__(
         self,
@@ -24,6 +61,8 @@ class ToniaError(Exception):
         self.status = status
         self.body = body
         self.headers = dict(headers or {})
+        self.retry_after_seconds = parse_retry_after_seconds(headers)
+        self.request_id = parse_request_id(headers)
 
 
 class AuthenticationError(ToniaError):
@@ -38,10 +77,16 @@ class BillingError(ToniaError):
 
 class EntitlementError(ToniaError):
     def __init__(
-        self, message: str, *, entitlement_block: Any = None, **kwargs: Any
+        self,
+        message: str,
+        *,
+        entitlement_block: Any = None,
+        scope: str | None = None,
+        **kwargs: Any,
     ) -> None:
         super().__init__(message, type="entitlement_error", **kwargs)
         self.entitlement_block = entitlement_block
+        self.scope = scope
 
 
 class InvalidRequestError(ToniaError):
@@ -66,8 +111,30 @@ class TenantUpstreamBlockedError(ToniaError):
 
 
 class ManagedCredentialUnavailableError(ToniaError):
-    def __init__(self, message: str, **kwargs: Any) -> None:
+    def __init__(
+        self, message: str, *, provider: str | None = None, **kwargs: Any
+    ) -> None:
         super().__init__(message, type="managed_credential_unavailable", **kwargs)
+        self.provider = provider
+
+
+class RateLimitError(ToniaError):
+    def __init__(
+        self,
+        message: str,
+        *,
+        reason: str | None = None,
+        scope: str | None = None,
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(message, type="rate_limit_error", **kwargs)
+        self.reason = reason
+        self.scope = scope
+
+
+class ApiError(ToniaError):
+    def __init__(self, message: str, **kwargs: Any) -> None:
+        super().__init__(message, type="api_error", **kwargs)
 
 
 class PathNotAllowedError(ToniaError):
@@ -95,20 +162,95 @@ def error_from_structured(
         "body": body,
         "headers": headers,
     }
-    mapping: dict[str, type[ToniaError]] = {
-        "authentication_error": AuthenticationError,
-        "billing_error": BillingError,
-        "entitlement_error": EntitlementError,
-        "invalid_request_error": InvalidRequestError,
-        "byok_key_missing": ByokKeyMissingError,
-        "policy_block": PolicyBlockError,
-        "tenant_upstream_blocked": TenantUpstreamBlockedError,
-        "managed_credential_unavailable": ManagedCredentialUnavailableError,
-    }
-    cls = mapping.get(str(err.get("type")), ToniaError)
-    if cls is ToniaError:
-        return ToniaError(message, type=str(err.get("type") or "unknown"), **base)
-    return cls(message, **base)
+    error_type = str(err.get("type") or "unknown")
+    if error_type == "authentication_error":
+        return AuthenticationError(message, **base)
+    if error_type == "billing_error":
+        return BillingError(message, **base)
+    if error_type == "entitlement_error":
+        scope = err.get("scope")
+        return EntitlementError(
+            message,
+            scope=str(scope) if isinstance(scope, str) else None,
+            **base,
+        )
+    if error_type == "invalid_request_error":
+        return InvalidRequestError(message, **base)
+    if error_type == "byok_key_missing":
+        return ByokKeyMissingError(message, **base)
+    if error_type == "policy_block":
+        return PolicyBlockError(message, **base)
+    if error_type == "tenant_upstream_blocked":
+        return TenantUpstreamBlockedError(message, **base)
+    if error_type == "managed_credential_unavailable":
+        provider = err.get("provider")
+        return ManagedCredentialUnavailableError(
+            message,
+            provider=str(provider) if isinstance(provider, str) else None,
+            **base,
+        )
+    if error_type == "rate_limit_error":
+        reason = err.get("reason")
+        scope = err.get("scope")
+        return RateLimitError(
+            message,
+            reason=str(reason) if isinstance(reason, str) else None,
+            scope=str(scope) if isinstance(scope, str) else None,
+            **base,
+        )
+    if error_type == "api_error":
+        return ApiError(message, **base)
+    return ToniaError(message, type=error_type, **base)
+
+
+def error_from_http_fallback(
+    status: int,
+    *,
+    body: Any = None,
+    headers: Mapping[str, str] | None = None,
+) -> ToniaError:
+    """Fallback when Pass returns 4xx/5xx without a structured envelope."""
+    message = f"HTTP {status}"
+    if status == 429:
+        return RateLimitError(
+            message, status=status, body=body, headers=headers, retryable=True
+        )
+    if status in {502, 503}:
+        return ApiError(
+            message, status=status, body=body, headers=headers, retryable=True
+        )
+    return ToniaError(
+        message,
+        type="invalid_request_error",
+        status=status,
+        body=body,
+        headers=headers,
+        retryable=False,
+    )
+
+
+def raise_from_stream_headers(headers: Mapping[str, str] | None) -> None:
+    """Raise if Pass already decided the stream is blocked (headers, before SSE)."""
+    policy = _header_get(headers, "x-tonia-policy-block")
+    if policy:
+        raise PolicyBlockError(
+            "tonia policy block",
+            code=policy,
+            retryable=False,
+            status=200,
+            headers=headers,
+            policy_block={"code": policy},
+        )
+    entitlement = _header_get(headers, "x-tonia-entitlement-block")
+    if entitlement:
+        raise EntitlementError(
+            "tonia entitlement block",
+            code=entitlement,
+            retryable=True,
+            status=200,
+            headers=headers,
+            entitlement_block={"code": entitlement},
+        )
 
 
 def raise_from_response_body(
@@ -154,6 +296,11 @@ def raise_from_response_body(
                 body=body,
                 headers=headers,
                 entitlement_block=carrier,
+                scope=(
+                    str(carrier.get("scope"))
+                    if isinstance(carrier, dict) and isinstance(carrier.get("scope"), str)
+                    else None
+                ),
                 retryable=(
                     bool(carrier.get("retryable"))
                     if isinstance(carrier, dict)

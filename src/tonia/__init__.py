@@ -2,7 +2,9 @@
 
 from .async_client import AsyncTonia
 from .client import Tonia
+from ._transport import IMAGE_TIMEOUT_S, SDK_USER_AGENT, SDK_VERSION
 from .errors import (
+    ApiError,
     AuthenticationError,
     BillingError,
     ByokKeyMissingError,
@@ -11,6 +13,7 @@ from .errors import (
     ManagedCredentialUnavailableError,
     PathNotAllowedError,
     PolicyBlockError,
+    RateLimitError,
     TenantUpstreamBlockedError,
     ToniaError,
 )
@@ -29,9 +32,14 @@ __all__ = [
     "PolicyBlockError",
     "TenantUpstreamBlockedError",
     "ManagedCredentialUnavailableError",
+    "RateLimitError",
+    "ApiError",
     "PathNotAllowedError",
     "LimitInfo",
     "SseEvent",
+    "IMAGE_TIMEOUT_S",
+    "SDK_USER_AGENT",
+    "SDK_VERSION",
 ]
 
-__version__ = "0.1.0"
+__version__ = SDK_VERSION

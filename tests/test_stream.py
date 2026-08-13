@@ -12,6 +12,18 @@ def test_feed_sse_parses_and_keeps_remainder() -> None:
     assert rest == 'data: {"b"'
 
 
+def test_stream_carrier_nested_anthropic_message_start() -> None:
+    with pytest.raises(PolicyBlockError):
+        raise_if_stream_carrier(
+            {
+                "type": "message_start",
+                "message": {
+                    "_tonia_policy_block": {"code": "regulated_content_detected"}
+                },
+            }
+        )
+
+
 def test_stream_carrier() -> None:
     with pytest.raises(PolicyBlockError):
         raise_if_stream_carrier(

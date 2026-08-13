@@ -9,8 +9,16 @@ from urllib.parse import quote
 
 import httpx
 
-from ._transport import DEFAULT_BASE_URL, AuthStyle, build_headers, join_url, parse_body
-from .errors import ToniaError, raise_from_response_body
+from ._transport import (
+    DEFAULT_BASE_URL,
+    DEFAULT_TIMEOUT_S,
+    IMAGE_TIMEOUT_S,
+    AuthStyle,
+    build_headers,
+    join_url,
+    parse_body,
+)
+from .errors import error_from_http_fallback, raise_from_response_body, raise_from_stream_headers
 from .escape import assert_path_allowed
 from .limits import LimitInfo, limits_from_headers
 from .stream import SseEvent, iter_sse_bytes
@@ -23,12 +31,15 @@ class Tonia:
         api_key: str | None = None,
         base_url: str | None = None,
         default_headers: Mapping[str, str] | None = None,
-        timeout: float = 60.0,
+        timeout: float | None = None,
     ) -> None:
         self.base_url = (base_url or DEFAULT_BASE_URL).rstrip("/")
         self.api_key = api_key or os.environ.get("TONIA_API_KEY")
         self.default_headers = dict(default_headers or {})
-        self._client = httpx.Client(timeout=timeout)
+        self.timeout = timeout
+        self._client = httpx.Client(
+            timeout=DEFAULT_TIMEOUT_S if timeout is None else timeout
+        )
         self.last_limits: LimitInfo | None = None
 
         self.catalogue = _Catalogue(self)
@@ -43,7 +54,6 @@ class Tonia:
         self.responses = _Responses(self)
         self.rerank = _Rerank(self)
         self.interactions = _Interactions(self)
-        self.conversations = _Conversations(self)
 
     def close(self) -> None:
         self._client.close()
@@ -54,6 +64,9 @@ class Tonia:
     def __exit__(self, *args: object) -> None:
         self.close()
 
+    def _image_timeout(self) -> float:
+        return IMAGE_TIMEOUT_S if self.timeout is None else self.timeout
+
     def request(
         self,
         method: str,
@@ -62,10 +75,16 @@ class Tonia:
         *,
         auth: AuthStyle = "bearer",
         headers: Mapping[str, str] | None = None,
+        timeout: float | None = None,
     ) -> Any:
         """Call a supported Pass path that has no named helper."""
         return self._send(
-            method, assert_path_allowed(path), body, auth=auth, headers=headers
+            method,
+            assert_path_allowed(path),
+            body,
+            auth=auth,
+            headers=headers,
+            timeout=timeout,
         )
 
     def _send(
@@ -76,7 +95,9 @@ class Tonia:
         *,
         auth: AuthStyle = "bearer",
         headers: Mapping[str, str] | None = None,
+        timeout: float | None = None,
     ) -> Any:
+        path = assert_path_allowed(path)
         hdrs = build_headers(
             api_key=self.api_key,
             default_headers=self.default_headers,
@@ -86,17 +107,14 @@ class Tonia:
         kwargs: dict[str, Any] = {"headers": hdrs}
         if body is not None:
             kwargs["json"] = body
+        if timeout is not None:
+            kwargs["timeout"] = timeout
         res = self._client.request(method.upper(), join_url(self.base_url, path), **kwargs)
         parsed = parse_body(res)
         raise_from_response_body(parsed, status=res.status_code, headers=res.headers)
         if res.is_error:
-            raise ToniaError(
-                f"HTTP {res.status_code}",
-                type="invalid_request_error",
-                status=res.status_code,
-                body=parsed,
-                headers=res.headers,
-                retryable=False,
+            raise error_from_http_fallback(
+                res.status_code, body=parsed, headers=res.headers
             )
         self.last_limits = limits_from_headers(res.headers)
         return parsed
@@ -109,8 +127,11 @@ class Tonia:
         *,
         auth: AuthStyle = "bearer",
         headers: Mapping[str, str] | None = None,
+        timeout: float | None = None,
     ) -> Iterator[SseEvent]:
         import json
+
+        path = assert_path_allowed(path)
 
         if isinstance(body, dict):
             payload: Any = {**body, "stream": True}
@@ -126,11 +147,16 @@ class Tonia:
             headers=headers,
             accept="text/event-stream",
         )
+        stream_kwargs: dict[str, Any] = {
+            "headers": hdrs,
+            "json": payload if isinstance(payload, dict) else None,
+        }
+        if timeout is not None:
+            stream_kwargs["timeout"] = timeout
         with self._client.stream(
             method.upper(),
             join_url(self.base_url, path),
-            headers=hdrs,
-            json=payload if isinstance(payload, dict) else None,
+            **stream_kwargs,
         ) as res:
             self.last_limits = limits_from_headers(res.headers)
             content_type = res.headers.get("content-type", "")
@@ -145,16 +171,13 @@ class Tonia:
                     parsed, status=res.status_code, headers=res.headers
                 )
                 if res.is_error:
-                    raise ToniaError(
-                        f"HTTP {res.status_code}",
-                        type="invalid_request_error",
-                        status=res.status_code,
-                        body=parsed,
-                        headers=res.headers,
-                        retryable=False,
+                    raise error_from_http_fallback(
+                        res.status_code, body=parsed, headers=res.headers
                     )
                 return
+            raise_from_stream_headers(res.headers)
             yield from iter_sse_bytes(res.iter_bytes())
+
 
 class _Catalogue:
     def __init__(self, client: Tonia) -> None:
@@ -248,10 +271,19 @@ class _Images:
         self._c = client
 
     def generate(self, **body: Any) -> Any:
-        return self._c._send("POST", "/v1/images/generations", body)
+        """Path A generate (openai / xAI / StepFun). Gemini → /v1/interactions."""
+        return self._c._send(
+            "POST",
+            "/v1/images/generations",
+            body,
+            timeout=self._c._image_timeout(),
+        )
 
     def edit(self, **body: Any) -> Any:
-        return self._c._send("POST", "/v1/images/edits", body)
+        """Path A edit (openai / xAI / StepFun). Gemini → /v1/interactions."""
+        return self._c._send(
+            "POST", "/v1/images/edits", body, timeout=self._c._image_timeout()
+        )
 
 
 class _Responses:
@@ -280,53 +312,18 @@ class _Interactions:
         self._c = client
 
     def create(self, **body: Any) -> Any:
+        """Gemini text and image SKUs. Native Interactions body, not Path A."""
         if body.get("stream"):
             return self.stream(**body)
-        return self._c._send("POST", "/v1/interactions", body)
+        return self._c._send(
+            "POST", "/v1/interactions", body, timeout=self._c._image_timeout()
+        )
 
     def stream(self, **body: Any) -> Iterator[SseEvent]:
-        return self._c._stream("POST", "/v1/interactions", body)
-
-
-class _Conversations:
-    def __init__(self, client: Tonia) -> None:
-        self._c = client
-
-    def list(self, *, archived: int | None = None) -> Any:
-        path = "/v1/conversations"
-        if archived == 1:
-            path += "?archived=1"
-        return self._c._send("GET", path)
-
-    def create(self, **body: Any) -> Any:
-        return self._c._send("POST", "/v1/conversations", body or {})
-
-    def get(self, conversation_id: str) -> Any:
-        return self._c._send(
-            "GET", f"/v1/conversations/{quote(conversation_id, safe='')}"
-        )
-
-    def update(self, conversation_id: str, *, archived: bool) -> Any:
-        return self._c._send(
-            "PATCH",
-            f"/v1/conversations/{quote(conversation_id, safe='')}",
-            {"archived": archived},
-        )
-
-    def delete(self, conversation_id: str) -> Any:
-        return self._c._send(
-            "DELETE", f"/v1/conversations/{quote(conversation_id, safe='')}"
-        )
-
-    def export(self) -> Any:
-        return self._c._send("GET", "/v1/conversations/export")
-
-    def append(self, conversation_id: str, **body: Any) -> Any:
-        return self._c._send(
+        return self._c._stream(
             "POST",
-            f"/v1/conversations/{quote(conversation_id, safe='')}/messages",
+            "/v1/interactions",
             body,
+            timeout=self._c._image_timeout(),
         )
 
-    def delete_history(self) -> Any:
-        return self._c._send("DELETE", "/v1/conversations")

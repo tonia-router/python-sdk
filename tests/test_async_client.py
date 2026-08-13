@@ -4,7 +4,7 @@ import httpx
 import pytest
 
 from tonia import AsyncTonia
-from tonia.errors import PathNotAllowedError
+from tonia.errors import PathNotAllowedError, PolicyBlockError
 
 
 def test_async_request_rejects_unsupported_path() -> None:
@@ -12,6 +12,37 @@ def test_async_request_rejects_unsupported_path() -> None:
         async with AsyncTonia(api_key="tonia_sk_test") as client:
             with pytest.raises(PathNotAllowedError):
                 await client.request("GET", "/healthz")
+
+    asyncio.run(run())
+
+
+def test_async_stream_raises_on_policy_header_before_yielding() -> None:
+    async def run() -> None:
+        def handler(_request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200,
+                headers={
+                    "content-type": "text/event-stream",
+                    "x-tonia-policy-block": "regulated_content_detected",
+                },
+                content=b'data: {"choices":[{"delta":{"content":"blocked"}}]}\n\n',
+            )
+
+        async with AsyncTonia(
+            api_key="tonia_sk_test", base_url="https://pass.example"
+        ) as client:
+            await client._client.aclose()
+            client._client = httpx.AsyncClient(
+                transport=httpx.MockTransport(handler)
+            )
+            yielded = 0
+            with pytest.raises(PolicyBlockError) as caught:
+                async for _event in client.chat.completions.stream(
+                    model="gpt-test", messages=[]
+                ):
+                    yielded += 1
+            assert yielded == 0
+            assert caught.value.code == "regulated_content_detected"
 
     asyncio.run(run())
 
@@ -42,23 +73,10 @@ def test_async_named_helpers_match_locked_surface() -> None:
                 model="rerank", query="a", documents=["b"]
             )
             await client.interactions.create(model="gpt", input="hello")
-            await client.conversations.list(archived=1)
-            await client.conversations.create(title="test")
-            await client.conversations.update("conversation/id", archived=True)
-            await client.conversations.delete("conversation/id")
-            await client.conversations.export()
-            await client.conversations.append(
-                "conversation/id", role="user", content="hello"
-            )
-            await client.conversations.delete_history()
 
         assert ("GET", "/v1/public/models/vendor%2Fmodel") in calls
         assert ("POST", "/v1/images/generations") in calls
         assert ("POST", "/v1/responses") in calls
         assert ("POST", "/v1/interactions") in calls
-        assert (
-            "POST",
-            "/v1/conversations/conversation%2Fid/messages",
-        ) in calls
 
     asyncio.run(run())
