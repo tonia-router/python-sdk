@@ -17,6 +17,7 @@ from ._transport import (
     build_headers,
     join_url,
     parse_body,
+    transcription_multipart,
 )
 from .errors import error_from_http_fallback, raise_from_response_body, raise_from_stream_headers
 from .escape import assert_path_allowed
@@ -51,6 +52,7 @@ class Tonia:
         self.messages = _Messages(self)
         self.embeddings = _Embeddings(self)
         self.images = _Images(self)
+        self.audio = _Audio(self)
         self.responses = _Responses(self)
         self.rerank = _Rerank(self)
         self.interactions = _Interactions(self)
@@ -96,6 +98,8 @@ class Tonia:
         auth: AuthStyle = "bearer",
         headers: Mapping[str, str] | None = None,
         timeout: float | None = None,
+        files: Any = None,
+        data: Any = None,
     ) -> Any:
         path = assert_path_allowed(path)
         hdrs = build_headers(
@@ -105,7 +109,17 @@ class Tonia:
             headers=headers,
         )
         kwargs: dict[str, Any] = {"headers": hdrs}
-        if body is not None:
+        if files is not None:
+            # httpx must set the multipart boundary — do not send json=.
+            kwargs["headers"] = {
+                key: value
+                for key, value in hdrs.items()
+                if key.lower() != "content-type"
+            }
+            kwargs["files"] = files
+            if data is not None:
+                kwargs["data"] = data
+        elif body is not None:
             kwargs["json"] = body
         if timeout is not None:
             kwargs["timeout"] = timeout
@@ -284,6 +298,52 @@ class _Images:
         return self._c._send(
             "POST", "/v1/images/edits", body, timeout=self._c._image_timeout()
         )
+
+
+class _AudioSpeech:
+    def __init__(self, client: Tonia) -> None:
+        self._c = client
+
+    def create(self, **body: Any) -> Any:
+        """OpenAI-shaped TTS. Returns audio bytes."""
+        return self._c._send(
+            "POST",
+            "/v1/audio/speech",
+            body,
+            headers={"Accept": "application/octet-stream, audio/*, application/json"},
+            timeout=self._c._image_timeout(),
+        )
+
+
+class _AudioTranscriptions:
+    def __init__(self, client: Tonia) -> None:
+        self._c = client
+
+    def create(
+        self,
+        *,
+        model: str,
+        file: Any,
+        filename: str | None = None,
+        **fields: Any,
+    ) -> Any:
+        """OpenAI-shaped STT. Multipart ``file`` + ``model``. Returns JSON."""
+        files, data = transcription_multipart(
+            model=model, file=file, filename=filename, fields=fields
+        )
+        return self._c._send(
+            "POST",
+            "/v1/audio/transcriptions",
+            files=files,
+            data=data,
+            timeout=self._c._image_timeout(),
+        )
+
+
+class _Audio:
+    def __init__(self, client: Tonia) -> None:
+        self.speech = _AudioSpeech(client)
+        self.transcriptions = _AudioTranscriptions(client)
 
 
 class _Responses:

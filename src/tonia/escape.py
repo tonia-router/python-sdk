@@ -12,6 +12,7 @@ ESCAPE_HATCH_PREFIXES: tuple[str, ...] = (
     "/v1/messages",
     "/v1/embeddings",
     "/v1/images/",
+    "/v1/audio/",
     "/v1/responses",
     "/v1/rerank",
     "/v1/interactions",

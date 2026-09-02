@@ -68,6 +68,12 @@ def test_async_named_helpers_match_locked_surface() -> None:
             await client.embeddings.create(model="embed", input="hello")
             await client.images.generate(model="image", prompt="hello")
             await client.images.edit(model="image", prompt="hello")
+            await client.audio.speech.create(
+                model="gpt-4o-mini-tts", input="hello", voice="alloy"
+            )
+            await client.audio.transcriptions.create(
+                model="gpt-transcribe", file=b"RIFF", filename="clip.wav"
+            )
             await client.responses.create(model="gpt", input="hello")
             await client.rerank.create(
                 model="rerank", query="a", documents=["b"]
@@ -76,6 +82,8 @@ def test_async_named_helpers_match_locked_surface() -> None:
 
         assert ("GET", "/v1/public/models/vendor%2Fmodel") in calls
         assert ("POST", "/v1/images/generations") in calls
+        assert ("POST", "/v1/audio/speech") in calls
+        assert ("POST", "/v1/audio/transcriptions") in calls
         assert ("POST", "/v1/responses") in calls
         assert ("POST", "/v1/interactions") in calls
 

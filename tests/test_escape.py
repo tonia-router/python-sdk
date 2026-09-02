@@ -18,6 +18,8 @@ def test_normalize_path() -> None:
         "/v1/public/catalogue",
         "/v1/status",
         "/v1/interactions",
+        "/v1/audio/speech",
+        "/v1/audio/transcriptions",
     ],
 )
 def test_supported(path: str) -> None:
@@ -39,6 +41,7 @@ def test_dot_segment_traversal_to_supported_prefix_is_allowed() -> None:
         "/v1/conversations/export",
         "/healthz",
         "/v1/models/../billing/checkout",
+        "/v1/realtime",
     ],
 )
 def test_unsupported(path: str) -> None:

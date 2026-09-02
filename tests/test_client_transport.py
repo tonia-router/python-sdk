@@ -238,6 +238,10 @@ def test_all_named_nonstream_helpers_use_locked_public_surface() -> None:
         client.embeddings.create(model="embed", input="hello")
         client.images.generate(model="image", prompt="hello")
         client.images.edit(model="image", prompt="hello")
+        client.audio.speech.create(model="gpt-4o-mini-tts", input="hello", voice="alloy")
+        client.audio.transcriptions.create(
+            model="gpt-transcribe", file=b"RIFF", filename="clip.wav"
+        )
         client.responses.create(model="gpt", input="hello")
         client.rerank.create(model="rerank", query="a", documents=["b"])
         client.interactions.create(model="gpt", input="hello")
@@ -249,6 +253,8 @@ def test_all_named_nonstream_helpers_use_locked_public_surface() -> None:
         ("POST", "/v1/embeddings"),
         ("POST", "/v1/images/generations"),
         ("POST", "/v1/images/edits"),
+        ("POST", "/v1/audio/speech"),
+        ("POST", "/v1/audio/transcriptions"),
         ("POST", "/v1/responses"),
         ("POST", "/v1/rerank"),
         ("POST", "/v1/interactions"),
@@ -385,3 +391,64 @@ def test_gemini_images_generate_maps_provider_requires_surface() -> None:
     assert caught.value.retryable is False
     envelope = caught.value.body["error"]
     assert envelope["required_surface"] == "interactions"
+
+
+def test_audio_speech_returns_bytes() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/v1/audio/speech"
+        assert request.headers["accept"].startswith("application/octet-stream")
+        return httpx.Response(
+            200,
+            headers={"content-type": "audio/mpeg"},
+            content=b"ID3\x00fake-mp3",
+        )
+
+    with _client(handler, api_key="tonia_test") as client:
+        audio = client.audio.speech.create(
+            model="gpt-4o-mini-tts", input="Bonjour", voice="alloy"
+        )
+    assert audio == b"ID3\x00fake-mp3"
+
+
+_TINY_STT_WAV = (
+    b"RIFF$\x00\x00\x00WAVEfmt "
+    b"\x10\x00\x00\x00\x01\x00\x01\x00"
+    b"@\x1f\x00\x00\x80>\x00\x00"
+    b"\x02\x00\x10\x00data\x08\x00\x00\x00"
+    b"\x00\x00\x00\x00\x00\x00\x00\x00"
+)
+
+
+def test_audio_transcriptions_sends_multipart_and_returns_json() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/v1/audio/transcriptions"
+        content_type = request.headers["content-type"]
+        assert "multipart/form-data" in content_type
+        assert "application/json" not in content_type
+        body = request.content
+        assert b"filename=" in body
+        assert b"clip.wav" in body
+        assert b"gpt-transcribe" in body
+        assert b'name="model"' in body
+        assert not body.lstrip().startswith(b"{")
+        return httpx.Response(200, json={"text": "bonjour"})
+
+    with _client(handler, api_key="tonia_test") as client:
+        out = client.audio.transcriptions.create(
+            model="gpt-transcribe",
+            file=_TINY_STT_WAV,
+            filename="clip.wav",
+        )
+    assert out == {"text": "bonjour"}
+
+
+def test_audio_transcriptions_rejects_data_uri_file() -> None:
+    def handler(_request: httpx.Request) -> httpx.Response:
+        raise AssertionError("network must not be called")
+
+    with _client(handler, api_key="tonia_test") as client:
+        with pytest.raises(ValueError, match="data URI"):
+            client.audio.transcriptions.create(
+                model="gpt-transcribe",
+                file="data:audio/wav;base64,AA==",
+            )

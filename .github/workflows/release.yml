@@ -31,6 +31,12 @@ jobs:
           cat > /tmp/notes.md <<EOF
           Official Python client for tonia Pass (\`tonia\`).
 
+          Audio support: \`audio.speech.create\` (TTS) and
+          \`audio.transcriptions.create\` (multipart STT). Gemini token
+          TTS/STT uses \`interactions.create\`. Sold examples:
+          \`mistral/voxtral-mini-tts-2603\`, \`openai/gpt-transcribe\`.
+          Workspace audio must be on (portal \`/dlp\`).
+
           Install: \`pip install tonia\`
 
           Requires Python 3.11+. Apache 2.0, copyright 2026 tonia inc.
