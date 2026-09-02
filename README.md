@@ -13,6 +13,8 @@ redistribute this software.
 
 ```bash
 pip install tonia
+# until PyPI is live:
+# pip install https://github.com/tonia-router/python-sdk/releases/download/v0.3.0/tonia-0.3.0-py3-none-any.whl
 # from a local checkout: pip install -e ../python-sdk
 ```
 
