@@ -95,14 +95,14 @@ calls `POST /v1/audio/transcriptions` as multipart with a real file
 have audio turned on (portal `/dlp`). Off returns HTTP 403
 `audio_not_in_plan`.
 
-Gemini token TTS/STT (`gemini-*-tts*`, `gemini-*-transcribe`) uses
-`client.interactions.create` / `POST /v1/interactions`. Do **not** call
-`audio.speech` or `audio.transcriptions` for those ids.
+Gemini token TTS/STT uses `client.interactions.create` /
+`POST /v1/interactions`. Do **not** call `audio.speech` or
+`audio.transcriptions` for those ids. Pick from `GET /v1/models` via
+`surface.path` / `audio_speech` / `audio_transcription`, not an id regex.
 
 ```python
-# Use an id from GET /v1/models with audio_speech / audio_transcription.
 # Sold examples: mistral/voxtral-mini-tts-2603, openai/gpt-transcribe.
-# Never gpt-4o-mini-tts. Gemini token TTS/STT uses interactions.create.
+# Gemini token TTS/STT uses interactions.create.
 speech = client.audio.speech.create(
     model="mistral/voxtral-mini-tts-2603",
     input="Bonjour Tonia",
@@ -121,7 +121,8 @@ with open("clip.wav", "rb") as audio:
 
 | Lab | Helper | Surface |
 | --- | --- | --- |
-| openai / xAI / StepFun | `client.images.generate` / `client.images.edit` | `POST /v1/images/generations` and `/edits` |
+| openai / xAI / Meta | `client.images.generate` / `client.images.edit` | `POST /v1/images/generations` and `/edits` |
+| Alibaba | `client.images.generate` | `POST /v1/images/generations` (generate only) |
 | Gemini image SKUs (`gemini-*-image*`) | `client.interactions.create` | `POST /v1/interactions` |
 
 Gemini on `/v1/images/*` returns HTTP 400 `provider_requires_surface`
