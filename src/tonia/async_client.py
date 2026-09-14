@@ -34,11 +34,13 @@ class AsyncTonia:
         base_url: str | None = None,
         default_headers: Mapping[str, str] | None = None,
         timeout: float | None = None,
+        realtime_url: str | None = None,
     ) -> None:
         self.base_url = (base_url or DEFAULT_BASE_URL).rstrip("/")
         self.api_key = api_key or os.environ.get("TONIA_API_KEY")
         self.default_headers = dict(default_headers or {})
         self.timeout = timeout
+        self.realtime_url = realtime_url or os.environ.get("TONIA_REALTIME_URL")
         self._client = httpx.AsyncClient(
             timeout=DEFAULT_TIMEOUT_S if timeout is None else timeout
         )
@@ -57,6 +59,7 @@ class AsyncTonia:
         self.responses = _Responses(self)
         self.rerank = _Rerank(self)
         self.interactions = _Interactions(self)
+        self.realtime = _Realtime(self)
 
     async def aclose(self) -> None:
         await self._client.aclose()
@@ -405,5 +408,35 @@ class _Interactions:
             "/v1/interactions",
             body,
             timeout=self._c._image_timeout(),
+        )
+
+
+class _Realtime:
+    def __init__(self, client: AsyncTonia) -> None:
+        self._c = client
+
+    async def connect(
+        self,
+        *,
+        provider: str = "openai",
+        model: str = "gpt-live-1",
+        mode: str = "cascaded",
+        chat_model: str | None = None,
+        transcripts: bool = False,
+    ) -> Any:
+        """Open tonia wss /v1/realtime. HTTP request() still rejects this path."""
+        from .realtime import aconnect_realtime
+
+        timeout = DEFAULT_TIMEOUT_S if self._c.timeout is None else self._c.timeout
+        return await aconnect_realtime(
+            api_key=self._c.api_key,
+            base_url=self._c.base_url,
+            realtime_url=self._c.realtime_url,
+            timeout=timeout,
+            provider=provider,
+            model=model,
+            mode=mode,
+            chat_model=chat_model,
+            transcripts=transcripts,
         )
 

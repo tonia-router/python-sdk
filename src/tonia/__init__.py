@@ -12,12 +12,19 @@ from .errors import (
     InvalidRequestError,
     ManagedCredentialUnavailableError,
     PathNotAllowedError,
+    AgentBlockError,
     PolicyBlockError,
     RateLimitError,
     TenantUpstreamBlockedError,
     ToniaError,
 )
 from .limits import LimitInfo
+from .realtime import (
+    AsyncRealtimeSession,
+    RealtimeSession,
+    realtime_connect_url,
+    realtime_ws_url,
+)
 from .stream import SseEvent
 
 __all__ = [
@@ -29,6 +36,7 @@ __all__ = [
     "EntitlementError",
     "InvalidRequestError",
     "ByokKeyMissingError",
+    "AgentBlockError",
     "PolicyBlockError",
     "TenantUpstreamBlockedError",
     "ManagedCredentialUnavailableError",
@@ -40,6 +48,10 @@ __all__ = [
     "IMAGE_TIMEOUT_S",
     "SDK_USER_AGENT",
     "SDK_VERSION",
+    "RealtimeSession",
+    "AsyncRealtimeSession",
+    "realtime_ws_url",
+    "realtime_connect_url",
 ]
 
 __version__ = SDK_VERSION

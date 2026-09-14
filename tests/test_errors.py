@@ -8,6 +8,7 @@ from tonia.errors import (
     EntitlementError,
     InvalidRequestError,
     ManagedCredentialUnavailableError,
+    AgentBlockError,
     PolicyBlockError,
     RateLimitError,
     TenantUpstreamBlockedError,
@@ -25,6 +26,24 @@ def test_http_200_policy_carrier() -> None:
             status=200,
         )
     assert exc.value.policy_block["code"] == "regulated_content_detected"
+
+
+def test_http_200_agent_carrier() -> None:
+    with pytest.raises(AgentBlockError) as exc:
+        raise_from_response_body(
+            {
+                "_tonia_agent_block": {
+                    "code": "tool_calls_disabled_by_profile",
+                    "capability": "tool_calls",
+                    "retryable": False,
+                }
+            },
+            status=200,
+        )
+    assert exc.value.agent_block["code"] == "tool_calls_disabled_by_profile"
+    assert exc.value.code == "tool_calls_disabled_by_profile"
+    assert exc.value.capability == "tool_calls"
+    assert exc.value.retryable is False
 
 
 def test_http_200_entitlement_carrier() -> None:
@@ -59,6 +78,7 @@ def test_public_model_flat_404_is_typed() -> None:
         ("invalid_request_error", InvalidRequestError),
         ("byok_key_missing", ByokKeyMissingError),
         ("policy_block", PolicyBlockError),
+        ("agent_block", AgentBlockError),
         ("tenant_upstream_blocked", TenantUpstreamBlockedError),
         ("managed_credential_unavailable", ManagedCredentialUnavailableError),
         ("rate_limit_error", RateLimitError),
@@ -94,6 +114,20 @@ def test_stream_policy_header_raises() -> None:
     assert exc.value.code == "regulated_content_detected"
     assert exc.value.retryable is False
     assert exc.value.policy_block["code"] == "regulated_content_detected"
+
+
+def test_stream_agent_header_raises() -> None:
+    with pytest.raises(AgentBlockError) as exc:
+        raise_from_stream_headers(
+            {
+                "x-tonia-agent-block": "tool_calls_disabled_by_profile",
+                "x-tonia-agent-capability": "tool_calls",
+            }
+        )
+    assert exc.value.code == "tool_calls_disabled_by_profile"
+    assert exc.value.capability == "tool_calls"
+    assert exc.value.retryable is False
+    assert exc.value.agent_block["code"] == "tool_calls_disabled_by_profile"
 
 
 def test_stream_entitlement_header_raises() -> None:

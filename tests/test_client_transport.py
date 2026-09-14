@@ -11,6 +11,7 @@ from tonia.errors import (
     EntitlementError,
     InvalidRequestError,
     ManagedCredentialUnavailableError,
+    AgentBlockError,
     PolicyBlockError,
     RateLimitError,
 )
@@ -114,6 +115,39 @@ def test_messages_uses_x_api_key_not_bearer() -> None:
         client.messages.create(model="claude-test", messages=[], max_tokens=1)
 
 
+def test_chat_and_messages_forward_prompt_cache_fields() -> None:
+    seen: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen[request.url.path] = json.loads(request.content)
+        return httpx.Response(
+            200,
+            json={"usage": {"prompt_tokens_details": {"cached_tokens": 8}}},
+        )
+
+    with _client(
+        handler,
+        api_key="tonia_test",
+        default_headers={"x-session-id": "sdk-cache-session"},
+    ) as client:
+        chat = client.chat.completions.create(
+            model="gpt-5.4-nano",
+            messages=[{"role": "user", "content": "ok"}],
+            prompt_cache_key="caller-key",
+        )
+        messages = client.messages.create(
+            model="claude-haiku-4-5",
+            max_tokens=8,
+            system="pad",
+            cache_control={"type": "ephemeral"},
+            messages=[{"role": "user", "content": "ok"}],
+        )
+    assert seen["/v1/chat/completions"]["prompt_cache_key"] == "caller-key"
+    assert seen["/v1/messages"]["cache_control"] == {"type": "ephemeral"}
+    assert chat["usage"]["prompt_tokens_details"]["cached_tokens"] == 8
+    assert messages["usage"]["prompt_tokens_details"]["cached_tokens"] == 8
+
+
 def test_missing_key_is_typed_before_network(monkeypatch: pytest.MonkeyPatch) -> None:
     # Live E2E packs alias TONIA_API_KEY; this cell must still prove missing-key.
     monkeypatch.delenv("TONIA_API_KEY", raising=False)
@@ -186,6 +220,30 @@ def test_stream_raises_on_policy_header_before_yielding() -> None:
                 yielded += 1
     assert yielded == 0
     assert caught.value.code == "regulated_content_detected"
+
+
+def test_stream_raises_on_agent_header_before_yielding() -> None:
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            headers={
+                "content-type": "text/event-stream",
+                "x-tonia-agent-block": "tool_calls_disabled_by_profile",
+                "x-tonia-agent-capability": "tool_calls",
+            },
+            content=b'data: {"choices":[{"delta":{"content":"blocked"}}]}\n\n',
+        )
+
+    yielded = 0
+    with _client(handler, api_key="tonia_test") as client:
+        with pytest.raises(AgentBlockError) as caught:
+            for _event in client.chat.completions.stream(
+                model="gpt-test", messages=[]
+            ):
+                yielded += 1
+    assert yielded == 0
+    assert caught.value.code == "tool_calls_disabled_by_profile"
+    assert caught.value.capability == "tool_calls"
 
 
 def test_stream_raises_on_entitlement_header_before_yielding() -> None:

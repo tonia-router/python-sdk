@@ -105,6 +105,20 @@ class PolicyBlockError(ToniaError):
         self.policy_block = policy_block
 
 
+class AgentBlockError(ToniaError):
+    def __init__(
+        self,
+        message: str,
+        *,
+        agent_block: Any = None,
+        capability: str | None = None,
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(message, type="agent_block", **kwargs)
+        self.agent_block = agent_block
+        self.capability = capability
+
+
 class TenantUpstreamBlockedError(ToniaError):
     def __init__(self, message: str, **kwargs: Any) -> None:
         super().__init__(message, type="tenant_upstream_blocked", **kwargs)
@@ -180,6 +194,13 @@ def error_from_structured(
         return ByokKeyMissingError(message, **base)
     if error_type == "policy_block":
         return PolicyBlockError(message, **base)
+    if error_type == "agent_block":
+        capability = err.get("capability")
+        return AgentBlockError(
+            message,
+            capability=str(capability) if isinstance(capability, str) else None,
+            **base,
+        )
     if error_type == "tenant_upstream_blocked":
         return TenantUpstreamBlockedError(message, **base)
     if error_type == "managed_credential_unavailable":
@@ -251,6 +272,18 @@ def raise_from_stream_headers(headers: Mapping[str, str] | None) -> None:
             headers=headers,
             entitlement_block={"code": entitlement},
         )
+    agent = _header_get(headers, "x-tonia-agent-block")
+    if agent:
+        capability = _header_get(headers, "x-tonia-agent-capability")
+        raise AgentBlockError(
+            "tonia agent block",
+            code=agent,
+            capability=capability,
+            retryable=False,
+            status=200,
+            headers=headers,
+            agent_block={"code": agent, "capability": capability},
+        )
 
 
 def raise_from_response_body(
@@ -282,6 +315,31 @@ def raise_from_response_body(
                 body=body,
                 headers=headers,
                 policy_block=carrier,
+            )
+        if "_tonia_agent_block" in body:
+            carrier = body["_tonia_agent_block"]
+            raise AgentBlockError(
+                "tonia agent block",
+                code=(
+                    str(carrier.get("code"))
+                    if isinstance(carrier, dict) and carrier.get("code")
+                    else None
+                ),
+                capability=(
+                    str(carrier.get("capability"))
+                    if isinstance(carrier, dict) and isinstance(carrier.get("capability"), str)
+                    else None
+                ),
+                retryable=(
+                    bool(carrier.get("retryable"))
+                    if isinstance(carrier, dict)
+                    and carrier.get("retryable") is not None
+                    else False
+                ),
+                status=200,
+                body=body,
+                headers=headers,
+                agent_block=carrier,
             )
         if "_tonia_entitlement_block" in body:
             carrier = body["_tonia_entitlement_block"]

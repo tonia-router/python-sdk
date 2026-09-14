@@ -63,7 +63,8 @@ async with AsyncTonia(api_key=os.environ["TONIA_API_KEY"]) as client:
 - Public catalogue, public models, and service status (no key). Public models
   are the Managed sell list — not what your key is allowed to call.
 - Runtime models and chat / messages / embeddings / images / audio.speech /
-  audio.transcriptions / responses / rerank / interactions (with `TONIA_API_KEY`)
+  audio.transcriptions / responses / rerank / interactions / realtime
+  (with `TONIA_API_KEY`)
 
 `client.models.list()` is what this key may call: the intersection of the
 Workspace roster and the bound profile's `model_allowlist` /
@@ -85,6 +86,34 @@ Store threads in your app and resend `messages[]` (see sdk-examples
 
 For paths without a named helper, use `client.request(method, path, body)`.
 Only supported Pass path prefixes are accepted.
+
+## Live / realtime
+
+`client.realtime.connect` opens **tonia** `wss://…:8443/v1/realtime`
+(not the lab Live API, not WebRTC). First hop is `openai` / `gpt-live-1`.
+Cascaded is the default. Native without `transcripts=True` is refused.
+`client.request("GET", "/v1/realtime")` stays blocked — HTTP on that path
+is 426. Reconnect is a new billed session.
+
+Hosted DEV: `TONIA_BASE_URL=https://pass-dev.tonia.ca:8443`. Keep `:8443`.
+Local Pass data (`:8444`) maps the helper to `:8448`. Override with
+`TONIA_REALTIME_URL` if needed.
+
+The key must see `gpt-live-1` on `models.list()` (portal profile →
+**Temps réel** / **Live**). Ask / clavarde has no microphone.
+
+```python
+with client.realtime.connect(model="gpt-live-1") as session:
+    session.send_text("Reply with the single word ok.")
+    event = session.wait_turn(timeout=60)
+    # session.created / output_text.done / transcript.final / …
+
+# Full duplex (PCM16 LE 24 kHz). Do not send input_text.
+with client.realtime.connect(
+    model="gpt-live-1", mode="native", transcripts=True
+) as session:
+    session.send_audio_append(pcm, mime="audio/pcm")
+```
 
 ## Audio
 
@@ -169,11 +198,13 @@ image links with `remote_image_url_not_supported`.
 
 ## Errors and content redaction
 
-HTTP 200 responses may still include `_tonia_policy_block` or
-`_tonia_entitlement_block` — the client raises typed errors. Content
-redaction is configured in the [tonia portal](https://portal.tonia.ca) by
-binding a key to a redact-mode profile (Policies → Profiles). The SDK does
-not set a redact header. Profile edits take effect on the next request.
+HTTP 200 responses may still include `_tonia_policy_block`,
+`_tonia_entitlement_block`, or `_tonia_agent_block` — the client raises
+typed errors (`PolicyBlockError`, `EntitlementError`, `AgentBlockError`).
+Content redaction is configured in the [tonia portal](https://portal.tonia.ca)
+by binding a key to a redact-mode profile (Policies → Profiles). Agent
+controls live on the same profile under Advanced — Agent controls. The SDK
+does not set a redact header. Profile edits take effect on the next request.
 
 Image inputs on `/v1/images` and chat-vision must contain inline bytes, such as a
 `data:image/png;base64,...` URL. Pass does not fetch remote image links:
