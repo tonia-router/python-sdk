@@ -113,6 +113,16 @@ with client.realtime.connect(
     model="gpt-live-1", mode="native", transcripts=True
 ) as session:
     session.send_audio_append(pcm, mime="audio/pcm")
+
+# Live STT (PCM16 LE 16 kHz). No spoken reply.
+with client.realtime.connect(
+    provider="gemini",
+    model="gemini-3.5-transcribe-live",
+    mode="native",
+    transcripts=True,
+) as session:
+    session.send_audio_append(pcm, mime="audio/pcm;rate=16000")
+    session.send_audio_commit(mime="audio/pcm;rate=16000")
 ```
 
 ## Audio
