@@ -25,7 +25,7 @@ from .realtime import (
     realtime_connect_url,
     realtime_ws_url,
 )
-from .stream import SseEvent
+from .stream import AsyncSseStream, SseEvent, SseStream
 
 __all__ = [
     "Tonia",
@@ -45,6 +45,8 @@ __all__ = [
     "PathNotAllowedError",
     "LimitInfo",
     "SseEvent",
+    "SseStream",
+    "AsyncSseStream",
     "IMAGE_TIMEOUT_S",
     "SDK_USER_AGENT",
     "SDK_VERSION",

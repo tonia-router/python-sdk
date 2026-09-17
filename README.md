@@ -14,7 +14,7 @@ redistribute this software.
 ```bash
 pip install tonia
 # until PyPI is live:
-# pip install https://github.com/tonia-router/python-sdk/releases/download/v0.3.0/tonia-0.3.0-py3-none-any.whl
+# pip install https://github.com/tonia-router/python-sdk/releases/download/v0.3.1/tonia-0.3.1-py3-none-any.whl
 # from a local checkout: pip install -e ../python-sdk
 ```
 
@@ -32,12 +32,14 @@ with Tonia(api_key=os.environ["TONIA_API_KEY"]) as client:
         messages=[{"role": "user", "content": "Bonjour"}],
     )
 
-    for event in client.chat.completions.stream(
+    stream = client.chat.completions.stream(
         model=ids[0],
         messages=[{"role": "user", "content": "Bonjour"}],
-    ):
+    )
+    for event in stream:
         if event.json:
             pass  # provider-shaped chunk
+        # Hang up: stream.close(), or break. Same as closing the socket.
 
     # Soft-limit warnings from the last successful call (when present)
     client.last_limits
@@ -51,11 +53,13 @@ from tonia import AsyncTonia
 async with AsyncTonia(api_key=os.environ["TONIA_API_KEY"]) as client:
     listed = await client.models.list()
     ids = [model["id"] for model in listed["data"]]
-    async for event in client.chat.completions.stream(
+    stream = client.chat.completions.stream(
         model=ids[0],
         messages=[{"role": "user", "content": "Bonjour"}],
-    ):
+    )
+    async for event in stream:
         pass
+    # Hang up: await stream.aclose(), or break.
 ```
 
 ## What you can call

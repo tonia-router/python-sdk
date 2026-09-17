@@ -200,6 +200,27 @@ def test_stream_is_incremental_and_reads_terminal_event() -> None:
     assert len(events) == 3
 
 
+def test_stream_close_stops_iteration() -> None:
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/event-stream"},
+            content=(
+                b'data: {"choices":[{"delta":{"content":"o"}}]}\n\n'
+                b'data: {"choices":[{"delta":{"content":"k"}}]}\n\n'
+                b"data: [DONE]\n\n"
+            ),
+        )
+
+    with _client(handler, api_key="tonia_test") as client:
+        stream = client.chat.completions.stream(model="gpt-test", messages=[])
+        first = next(stream)
+        stream.close()
+        with pytest.raises(StopIteration):
+            next(stream)
+    assert "o" in first.data
+
+
 def test_stream_raises_on_policy_header_before_yielding() -> None:
     def handler(_request: httpx.Request) -> httpx.Response:
         return httpx.Response(

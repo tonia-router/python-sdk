@@ -23,7 +23,7 @@ from ._transport import (
 from .errors import error_from_http_fallback, raise_from_response_body, raise_from_stream_headers
 from .escape import assert_path_allowed
 from .limits import LimitInfo, limits_from_headers
-from .stream import SseEvent, feed_sse, raise_if_stream_carrier
+from .stream import AsyncSseStream, SseEvent, feed_sse, raise_if_stream_carrier
 
 
 class AsyncTonia:
@@ -138,7 +138,28 @@ class AsyncTonia:
         self.last_limits = limits_from_headers(res.headers)
         return parsed
 
-    async def _stream(
+    def _stream(
+        self,
+        method: str,
+        path: str,
+        body: Any = None,
+        *,
+        auth: AuthStyle = "bearer",
+        headers: Mapping[str, str] | None = None,
+        timeout: float | None = None,
+    ) -> AsyncSseStream:
+        return AsyncSseStream(
+            self._stream_events(
+                method,
+                path,
+                body,
+                auth=auth,
+                headers=headers,
+                timeout=timeout,
+            )
+        )
+
+    async def _stream_events(
         self,
         method: str,
         path: str,
@@ -273,7 +294,7 @@ class _ChatCompletions:
             "POST", "/v1/chat/completions", body, auth="bearer"
         )
 
-    def stream(self, **body: Any) -> AsyncIterator[SseEvent]:
+    def stream(self, **body: Any) -> AsyncSseStream:
         return self._c._stream("POST", "/v1/chat/completions", body, auth="bearer")
 
 
@@ -291,7 +312,7 @@ class _Messages:
             return self.stream(**body)
         return await self._c._send("POST", "/v1/messages", body, auth="api_key")
 
-    def stream(self, **body: Any) -> AsyncIterator[SseEvent]:
+    def stream(self, **body: Any) -> AsyncSseStream:
         return self._c._stream("POST", "/v1/messages", body, auth="api_key")
 
 
@@ -378,7 +399,7 @@ class _Responses:
             return self.stream(**body)
         return await self._c._send("POST", "/v1/responses", body)
 
-    def stream(self, **body: Any) -> AsyncIterator[SseEvent]:
+    def stream(self, **body: Any) -> AsyncSseStream:
         return self._c._stream("POST", "/v1/responses", body)
 
 
@@ -402,7 +423,7 @@ class _Interactions:
             "POST", "/v1/interactions", body, timeout=self._c._image_timeout()
         )
 
-    def stream(self, **body: Any) -> AsyncIterator[SseEvent]:
+    def stream(self, **body: Any) -> AsyncSseStream:
         return self._c._stream(
             "POST",
             "/v1/interactions",

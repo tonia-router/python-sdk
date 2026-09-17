@@ -3,7 +3,7 @@ import asyncio
 import httpx
 import pytest
 
-from tonia import AsyncTonia
+from tonia import AsyncTonia, SDK_VERSION
 from tonia.errors import PathNotAllowedError, PolicyBlockError
 
 
@@ -45,6 +45,37 @@ def test_async_stream_raises_on_policy_header_before_yielding() -> None:
             assert caught.value.code == "regulated_content_detected"
 
     asyncio.run(run())
+
+
+def test_async_stream_aclose_stops_iteration() -> None:
+    async def run() -> None:
+        def handler(_request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200,
+                headers={"content-type": "text/event-stream"},
+                content=(
+                    b'data: {"choices":[{"delta":{"content":"o"}}]}\n\n'
+                    b'data: {"choices":[{"delta":{"content":"k"}}]}\n\n'
+                    b"data: [DONE]\n\n"
+                ),
+            )
+
+        async with AsyncTonia(
+            api_key="tonia_sk_test", base_url="https://pass.example"
+        ) as client:
+            await client._client.aclose()
+            client._client = httpx.AsyncClient(
+                transport=httpx.MockTransport(handler)
+            )
+            stream = client.chat.completions.stream(model="gpt-test", messages=[])
+            first = await stream.__anext__()
+            await stream.aclose()
+            with pytest.raises(StopAsyncIteration):
+                await stream.__anext__()
+            assert "o" in first.data
+
+    asyncio.run(run())
+    assert SDK_VERSION == "0.3.1"
 
 
 def test_async_named_helpers_match_locked_surface() -> None:

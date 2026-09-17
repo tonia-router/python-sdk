@@ -2,7 +2,7 @@ import pytest
 
 from tonia.errors import EntitlementError, PolicyBlockError
 from tonia.limits import limits_from_headers
-from tonia.stream import feed_sse, raise_if_stream_carrier
+from tonia.stream import SseEvent, SseStream, feed_sse, raise_if_stream_carrier
 
 
 def test_feed_sse_parses_and_keeps_remainder() -> None:
@@ -34,6 +34,41 @@ def test_stream_carrier() -> None:
         raise_if_stream_carrier(
             {"_tonia_entitlement_block": {"code": "managed_budget_exhausted"}}
         )
+
+
+def test_sse_stream_close_closes_inner() -> None:
+    closed = {"n": 0}
+
+    def events():
+        try:
+            yield SseEvent(data="a", raw="a")
+            yield SseEvent(data="b", raw="b")
+        finally:
+            closed["n"] += 1
+
+    stream = SseStream(events())
+    assert next(stream).data == "a"
+    stream.close()
+    assert closed["n"] == 1
+    with pytest.raises(StopIteration):
+        next(stream)
+
+
+def test_sse_stream_break_closes_inner() -> None:
+    closed = {"n": 0}
+
+    def events():
+        try:
+            yield SseEvent(data="a", raw="a")
+            yield SseEvent(data="b", raw="b")
+        finally:
+            closed["n"] += 1
+
+    stream = SseStream(events())
+    for event in stream:
+        assert event.data == "a"
+        break
+    assert closed["n"] == 1
 
 
 def test_limits_from_headers() -> None:

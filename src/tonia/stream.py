@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Iterator
+from collections.abc import AsyncIterator, Iterator
 from dataclasses import dataclass
 from typing import Any
 
@@ -55,6 +55,87 @@ def raise_if_stream_carrier(payload: Any) -> None:
         nested = payload.get("message")
         if isinstance(nested, dict):
             raise_from_response_body(nested, status=200)
+
+
+class SseStream:
+    """SSE iterator. ``close()`` hangs up the Pass socket (GeneratorExit)."""
+
+    def __init__(self, events: Iterator[SseEvent]) -> None:
+        self._events = events
+        self._closed = False
+
+    def close(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        close = getattr(self._events, "close", None)
+        if callable(close):
+            close()
+
+    def __iter__(self) -> Iterator[SseEvent]:
+        try:
+            yield from self._events
+        finally:
+            self.close()
+
+    def __next__(self) -> SseEvent:
+        if self._closed:
+            raise StopIteration
+        try:
+            return next(self._events)
+        except StopIteration:
+            self.close()
+            raise
+
+    def __enter__(self) -> SseStream:
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        self.close()
+
+    def __del__(self) -> None:
+        try:
+            self.close()
+        except Exception:
+            pass
+
+
+class AsyncSseStream:
+    """Async SSE iterator. ``aclose()`` hangs up the Pass socket."""
+
+    def __init__(self, events: AsyncIterator[SseEvent]) -> None:
+        self._events = events
+        self._closed = False
+
+    async def aclose(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        close = getattr(self._events, "aclose", None)
+        if callable(close):
+            await close()
+
+    async def __aiter__(self) -> AsyncIterator[SseEvent]:
+        try:
+            async for event in self._events:
+                yield event
+        finally:
+            await self.aclose()
+
+    async def __anext__(self) -> SseEvent:
+        if self._closed:
+            raise StopAsyncIteration
+        try:
+            return await self._events.__anext__()
+        except StopAsyncIteration:
+            await self.aclose()
+            raise
+
+    async def __aenter__(self) -> AsyncSseStream:
+        return self
+
+    async def __aexit__(self, *args: object) -> None:
+        await self.aclose()
 
 
 def iter_sse_bytes(chunks: Iterator[bytes]) -> Iterator[SseEvent]:
