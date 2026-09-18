@@ -75,7 +75,7 @@ def test_async_stream_aclose_stops_iteration() -> None:
             assert "o" in first.data
 
     asyncio.run(run())
-    assert SDK_VERSION == "0.3.1"
+    assert SDK_VERSION == "0.4.4"
 
 
 def test_async_named_helpers_match_locked_surface() -> None:

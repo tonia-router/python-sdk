@@ -41,7 +41,7 @@ jobs:
           \`mistral/voxtral-mini-tts-2603\`, \`openai/gpt-transcribe\`.
           Workspace audio must be on (portal \`/dlp\`).
 
-          Install until PyPI: \`pip install https://github.com/tonia-router/python-sdk/releases/download/${TAG}/tonia-0.3.1-py3-none-any.whl\`
+          Install until PyPI: \`pip install https://github.com/tonia-router/python-sdk/releases/download/${TAG}/tonia-0.4.4-py3-none-any.whl\`
 
           Requires Python 3.11+. Apache 2.0, copyright 2026 tonia inc.
           EOF

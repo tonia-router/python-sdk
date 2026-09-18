@@ -340,6 +340,30 @@ def test_all_named_nonstream_helpers_use_locked_public_surface() -> None:
     }
 
 
+def test_systemone_stays_an_escape_hatch_with_no_typed_helper() -> None:
+    seen: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request.url.path)
+        return httpx.Response(200, json={"answers": {}})
+
+    with _client(handler, api_key="tonia_test") as client:
+        out = client.request(
+            "POST",
+            "/v1/systemone",
+            {
+                "model": "typesafe/jev-latest",
+                "state": "The sky is blue.",
+                "questions": {
+                    "color": {"type": "noul", "instructions": "Is the sky blue?"}
+                },
+            },
+        )
+        assert out == {"answers": {}}
+        assert not hasattr(client, "systemone")
+    assert seen == ["/v1/systemone"]
+
+
 def test_nested_tool_image_and_websearch_body_is_passed_through_unchanged() -> None:
     body = {
         "model": "gpt-test",

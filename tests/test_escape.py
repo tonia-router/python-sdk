@@ -20,6 +20,7 @@ def test_normalize_path() -> None:
         "/v1/interactions",
         "/v1/audio/speech",
         "/v1/audio/transcriptions",
+        "/v1/systemone",
     ],
 )
 def test_supported(path: str) -> None:

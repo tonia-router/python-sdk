@@ -11,7 +11,7 @@ AuthStyle = Literal["bearer", "api_key", "none"]
 DEFAULT_BASE_URL = "https://pass.tonia.ca:8443"
 DEFAULT_TIMEOUT_S = 60.0
 IMAGE_TIMEOUT_S = 300.0
-SDK_VERSION = "0.3.1"
+SDK_VERSION = "0.4.4"
 SDK_USER_AGENT = f"tonia-sdk-py/{SDK_VERSION}"
 
 
