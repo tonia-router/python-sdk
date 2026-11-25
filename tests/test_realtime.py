@@ -39,21 +39,34 @@ def test_ws_url_override_wins() -> None:
     )
 
 
-def test_connect_url_defaults_cascaded_first_hop() -> None:
+def test_connect_url_defaults_native_with_transcripts() -> None:
     url = realtime_connect_url(base_url="https://pass-dev.tonia.ca:8443")
     assert url.startswith("wss://pass-dev.tonia.ca:8443/v1/realtime?")
     assert "provider=openai" in url
     assert "model=gpt-live-1" in url
-    assert "mode=cascaded" in url
+    assert "mode=native" in url
+    assert "transcripts=1" in url
 
 
-def test_native_without_transcripts_is_rejected() -> None:
+def test_native_turns_transcripts_on_when_unset() -> None:
+    url = realtime_connect_url(base_url="https://pass.tonia.ca:8443", mode="native")
+    assert "transcripts=1" in url
+
+
+def test_native_with_transcripts_off_is_rejected() -> None:
     with pytest.raises(InvalidRequestError) as exc:
         realtime_connect_url(
             base_url="https://pass.tonia.ca:8443",
             mode="native",
+            transcripts=False,
         )
     assert exc.value.code == "realtime_native_transcripts_required"
+
+
+def test_cascaded_is_sent_only_when_asked() -> None:
+    url = realtime_connect_url(base_url="https://pass.tonia.ca:8443", mode="cascaded")
+    assert "mode=cascaded" in url
+    assert "transcripts" not in url
 
 
 def test_webrtc_is_rejected() -> None:

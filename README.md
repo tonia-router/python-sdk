@@ -95,7 +95,8 @@ Only supported Pass path prefixes are accepted.
 
 `client.realtime.connect` opens **tonia** `wss://…:8443/v1/realtime`
 (not the lab Live API, not WebRTC). First hop is `openai` / `gpt-live-1`.
-Cascaded is the default. Native without `transcripts=True` is refused.
+Native is the default and always sends `transcripts=1`. A session takes
+PCM16 audio, not text. Cascaded mode is not offered.
 `client.request("GET", "/v1/realtime")` stays blocked — HTTP on that path
 is 426. Reconnect is a new billed session.
 
@@ -107,16 +108,11 @@ The key must see `gpt-live-1` on `models.list()` (portal profile →
 **Temps réel** / **Live**). Ask / clavarde has no microphone.
 
 ```python
+# Full duplex (PCM16 LE 24 kHz).
 with client.realtime.connect(model="gpt-live-1") as session:
-    session.send_text("Reply with the single word ok.")
-    event = session.wait_turn(timeout=60)
-    # session.created / output_text.done / transcript.final / …
-
-# Full duplex (PCM16 LE 24 kHz). Do not send input_text.
-with client.realtime.connect(
-    model="gpt-live-1", mode="native", transcripts=True
-) as session:
     session.send_audio_append(pcm, mime="audio/pcm")
+    event = session.recv(timeout=60)
+    # output_audio.delta / transcript.delta / transcript.final / …
 
 # Live STT (PCM16 LE 16 kHz). No spoken reply.
 with client.realtime.connect(

@@ -421,9 +421,9 @@ class _Realtime:
         *,
         provider: str = "openai",
         model: str = "gpt-live-1",
-        mode: str = "cascaded",
+        mode: str = "native",
         chat_model: str | None = None,
-        transcripts: bool = False,
+        transcripts: bool | None = None,
     ) -> Any:
         """Open tonia wss /v1/realtime. HTTP request() still rejects this path."""
         from .realtime import connect_realtime

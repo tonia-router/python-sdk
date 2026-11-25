@@ -59,9 +59,9 @@ def realtime_connect_url(
     realtime_url: str | None = None,
     provider: str = FIRST_HOP_PROVIDER,
     model: str = FIRST_HOP_MODEL,
-    mode: str = "cascaded",
+    mode: str = "native",
     chat_model: str | None = None,
-    transcripts: bool = False,
+    transcripts: bool | None = None,
     webrtc: bool = False,
     transport: str | None = None,
 ) -> str:
@@ -71,13 +71,16 @@ def realtime_connect_url(
             code="realtime_webrtc_forbidden",
             retryable=False,
         )
-    mode_norm = (mode or "cascaded").strip().lower()
+    mode_norm = (mode or "native").strip().lower()
     if mode_norm not in {"cascaded", "native"}:
         raise InvalidRequestError(
             "realtime mode must be cascaded or native",
             code="realtime_mode_invalid",
             retryable=False,
         )
+    # Native is the default and needs transcripts; unset means on for native.
+    if transcripts is None:
+        transcripts = mode_norm == "native"
     if mode_norm == "native" and not transcripts:
         raise InvalidRequestError(
             "native Live needs transcripts=1",
@@ -342,9 +345,9 @@ def connect_realtime(
     timeout: float = 60.0,
     provider: str = FIRST_HOP_PROVIDER,
     model: str = FIRST_HOP_MODEL,
-    mode: str = "cascaded",
+    mode: str = "native",
     chat_model: str | None = None,
-    transcripts: bool = False,
+    transcripts: bool | None = None,
 ) -> RealtimeSession:
     from websockets.sync.client import connect
 
@@ -376,9 +379,9 @@ async def aconnect_realtime(
     timeout: float = 60.0,
     provider: str = FIRST_HOP_PROVIDER,
     model: str = FIRST_HOP_MODEL,
-    mode: str = "cascaded",
+    mode: str = "native",
     chat_model: str | None = None,
-    transcripts: bool = False,
+    transcripts: bool | None = None,
 ) -> AsyncRealtimeSession:
     import asyncio
 
