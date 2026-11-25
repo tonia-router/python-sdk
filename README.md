@@ -84,7 +84,8 @@ with `x-api-key` only (Anthropic SDKs, Claude Code) returns
 `messages.create` sends `x-api-key` but still takes the OpenAI-shaped id
 from `models.list()`. Do not mix the two id styles.
 
-Chat conversation history (`/v1/conversations*`) stays on the chat app.
+Server-side conversation history (`/v1/conversations*`) is not part of
+this SDK.
 Store threads in your app and resend `messages[]` (see sdk-examples
 `09_saas_integrator`).
 
