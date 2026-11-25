@@ -1,6 +1,6 @@
 [project]
 name = "tonia"
-version = "0.4.4"
+version = "0.4.5"
 description = "Official Python client for tonia Pass, including speech and transcription"
 readme = "README.md"
 requires-python = ">=3.11"
